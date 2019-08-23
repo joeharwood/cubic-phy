@@ -15,7 +15,7 @@ options(dplyr.print_max = 10)
 source("S:\\OandT\\OptRisk\\Energy_Requirements\\09 - Demand forecasting (Forecasting team)\\Renewable Generation Capacity\\R function\\running 32 bit query function.R")
 
 root_dir <- "S:/OandT/OptRisk/Energy_Requirements/19 - Wind Energy/WPFS/Wind farm models"
-# check for 32 bit set up
+#check for 32 bit set up
 ifelse(.Machine$sizeof.pointer == 4, "Congrats you are running 32bit", "Caution - Its a trap 64bit")
 
 root_dir <- "S:/OandT/OptRisk/Energy_Requirements/19 - Wind Energy/WPFS/Wind farm models"
@@ -47,14 +47,14 @@ for (i in wind_farm_list) {
 
 wind_farm_list[i]
 
-## which Gen_id to study
+##which Gen_id to study
 Gen_id <- i
 GEN_IDs_FROM_FILE <- Gen_id
 
-## which models to check
+##which models to check
 Model_id <- c(1,5)
 
-## find the date that the cubic spline was last changed and assign to start_date
+##find the date that the cubic spline was last changed and assign to start_date
 query_date_range_by_cubic <- "select unique(TSTAMP) from DEAFDBA.GEN_1D_COEFFICIENTS_DATA where GEN_ID = Gen_id;"
 query_date_range_by_cubic <- gsub("Gen_id", Gen_id, query_date_range_by_cubic)
 
@@ -71,20 +71,20 @@ start_date_simple <- unique(start_date_simple)
 start_date <- paste0(start_date, " ", "00:00:00")
 
 
-## assign end date as today
+##assign end date as today
 end_date <- Sys.Date()
 end_date <- paste0(end_date, " ", "00:00:00")
 
 
-## recylced Andrews Code for obtaining actual wind speeds and metering for that Gen_id
+##recylced Andrews Code for obtaining actual wind speeds and metering for that Gen_id
 for (i in Gen_id) {
   tryCatch(
     {#create sql
       #change GEN_ID as appropriate
       GEN_ID_NUMBER <- Gen_id
       
-      ##  Identify location id and station id, if it exists
-      ##  If station id does not exist then best we have for wind speed is the most recent forecast
+      ##Identify location id and station id, if it exists
+      ##If station id does not exist then best we have for wind speed is the most recent forecast
       qlocation <- "select l.loc_id, s.station_id
       from gen_frcstr_loc_map l left join spf_frcstr_loc_station_map s
       on l.loc_id = s.loc_id
@@ -156,16 +156,16 @@ for (i in Gen_id) {
       wind_gen <- wind_gen %>% mutate(datetime = ymd_hms(DATETIME, tz = "GMT"), GEN_MW = pmax(GEN_MW, 0)) %>%
         select(datetime, GEN_MW)
       
-      ##  Combine wind and generation
+      ##Combine wind and generation
       
       metered <- inner_join(wind, wind_gen, by = "datetime") %>% mutate(gen_id = GEN_ID_NUMBER, capacity = capacity)
       
-      ##  If there's duplicated data: I know there's duplicated data in vactweather
+      ##If there's duplicated data: I know there's duplicated data in vactweather
       metered <- metered %>% mutate(dummy = 1:nrow(metered))
       metered_pick <- metered %>% group_by(datetime) %>% summarise (dummy = max(dummy)) 
       metered <- inner_join(metered, metered_pick, by = c("datetime", "dummy")) %>% select(-dummy)
       
-      # use diff function to compare consectutive gen_mw and remove if 0, unless it's at maximum capacity
+      #use diff function to compare consectutive gen_mw and remove if 0, unless it's at maximum capacity
       metered <- metered[c(TRUE, (abs(diff(metered$GEN_MW))>0 | (metered$GEN_MW == capacity)[-1])), ]
       
       ##Acquire BOA data
@@ -188,7 +188,7 @@ for (i in Gen_id) {
       
       if (nrow(BOA_data) > 0) {
         BOA_data <- BOA_data %>% mutate(datetime = ymd_hms(DATETIME, tz = "GMT") + minutes(30)) %>% select(datetime)
-        # join- remove all entries that have a datetime in the BOA table
+        #join- remove all entries that have a datetime in the BOA table
         metered <- anti_join(metered, BOA_data, by = "datetime")
       }
       
@@ -202,7 +202,7 @@ p <- ggplot(metered, aes(x = WS, y = GEN_MW)) + geom_point(size = 0.1)
 p
 
 
-## obtain forecast using physical model (mod1)
+##obtain forecast using physical model (mod1)
 
 query_meter_per_model <- "select GEN_ID, MODEL_ID, FRCST_DATETIME, TARGET_DATETIME, F_MW_MEAN, TSTAMP 
 from POWER_FRCST_DATA 
@@ -223,7 +223,7 @@ wind_mod_1 <- tbl_df(RODBC_query(connection_args, query_meter_per_model))
 names(wind_mod_1) <- c("GEN_ID",  "Model_id", "FRCST_DATETIME", "datetime", "physical", "TSTAMP")
 
 
-## obtain forecast using cubic splinel model (mod5)
+##obtain forecast using cubic splinel model (mod5)
 
 query_meter_per_model <- "select GEN_ID, MODEL_ID, FRCST_DATETIME, TARGET_DATETIME, F_MW_MEAN, TSTAMP 
 from POWER_FRCST_DATA 
@@ -290,9 +290,9 @@ p5 <- p5 +theme(legend.position="bottom")
 p5
 
 ###############################################################################################################################
-## Extracting physical parameters
-## Acquire existing physical model parameters
-## create sqlquery
+##Extracting physical parameters
+##Acquire existing physical model parameters
+##create sqlquery
 full_parameter <- "select 
 GTM.GEN_ID, 
 GTM.TRBNE_ID, 
@@ -309,17 +309,17 @@ where GTM.GEN_ID in (GEN_IDs_FROM_FILE);"
 full_parameter <- gsub("GEN_IDs_FROM_FILE", GEN_IDs_FROM_FILE, full_parameter)
 full_parameter <- gsub("\n", " ", full_parameter)
 
-##  run sql
+##run sql
 #full_parameter <- sqlQuery(myconn, full_parameter)
 
 full_parameter <- tbl_df(RODBC_query(connection_args, full_parameter))
 
-## Inputting into equation
+##Inputting into equation
 WS <- c(0:26)
 
 test <- full_parameter$SCALE/(1+full_parameter$MULT*exp((0-full_parameter$SENS)*(WS)))
 
-## Create new data frame
+##Create new data frame
 df <- data.frame(Wind_Speed=WS, MW_Output=test)
 
 ###############################################################################################################################
@@ -335,15 +335,15 @@ capacity <- unique(metered_BOA_removed$capacity)
 
 metered_BOA_removed<- metered_BOA_removed%>% mutate(LF = GEN_MW/capacity)
 
-## Re-formatting the date column as numerics
+##Re-formatting the date column as numerics
 
 metered_BOA_removed["Date"] <- as.numeric(format(metered_BOA_removed$datetime, format='%Y%m%d'))
 
-## Adding a Weighting column with higher values given to more recent dates
+##Adding a Weighting column with higher values given to more recent dates
 
 metered_BOA_removed["Weighting"] <- (max(metered_BOA_removed$Date, na.rm=TRUE) - min(metered_BOA_removed$Date, na.rm=TRUE)) - (max(metered_BOA_removed$Date, na.rm=TRUE) - metered_BOA_removed$Date)
 
-## Plots a graph with a colour scale: low weighting = red, high weighting = green
+##Plots a graph with a colour scale: low weighting = red, high weighting = green
 
 p <- ggplot(data = metered_BOA_removed, aes(x = WS, y = LF)) + geom_point(aes(color=metered_BOA_removed$Weighting)) + scale_color_gradient(low="red", high="green")
 p <- p + xlim(0, 30) + ylim(0,1)
@@ -359,8 +359,8 @@ p <- ggplot(data = wind_data_clean, aes(x = WS, y = LF)) +
 p <- p + xlim(0, 30) + ylim(0,1)
 p
 
-## Additional columns for points (0,0) and (26,0), given maximum weighting and nominal date,
-## to ensure graph crosses origin and cut off point
+##Additional columns for points (0,0) and (26,0), given maximum weighting and nominal date,
+##to ensure graph crosses origin and cut off point
 
 wind_data_clean <- rbind(wind_data_clean, 
                          data_frame(WS = 0, LF = 0, 
@@ -371,7 +371,7 @@ wind_data_clean <- rbind(wind_data_clean,
                                     Date=20190101, 
                                     Weighting=max(wind_data_clean$Weighting)))
 
-## Additional points added at (26,0) to pull graph down without distorting colour grading
+##Additional points added at (26,0) to pull graph down without distorting colour grading
 
 wind_data_clean <- rbind(wind_data_clean, 
                          data_frame(WS = 26, LF=0,
@@ -385,15 +385,15 @@ wind_data_clean <- rbind(wind_data_clean,
 p <- ggplot(data = wind_data_clean, aes(x = WS, y = LF)) + geom_point(aes(color=wind_data_clean$Weighting)) + scale_color_gradient(low="red", high="green")
 p
 
-## Play around with knot points until you are happy with the shape
-##  Break points at 5,10, 13, 15, 20
+##Play around with knot points until you are happy with the shape
+##Break points at 5,10, 13, 15, 20
 
 knots_EFS <- "select WS_MIN from GEN_1DBRKPOINT_DATA where GEN_ID = GEN_IDs_FROM_FILE;"
 
 knots_EFS_q <- gsub("GEN_IDs_FROM_FILE", GEN_IDs_FROM_FILE, knots_EFS)
 knots_EFS_q <- gsub("\n", " ", knots_EFS_q)
 
-##  run sql
+##run sql
 #knots_EFS_output <- sqlQuery(myconn, knots_EFS_q)
 knots_EFS_output <- tbl_df(RODBC_query(connection_args, knots_EFS_q))
 
